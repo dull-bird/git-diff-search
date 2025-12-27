@@ -260,19 +260,6 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         opacity: 1;
                     }
                     
-                    /* 加载动画 */
-                    .loading-spinner {
-                        display: none;
-                        width: 14px;
-                        height: 14px;
-                        border: 2px solid var(--vscode-textLink-foreground);
-                        border-top: 2px solid transparent;
-                        border-radius: 50%;
-                        animation: spin 1s linear infinite;
-                        margin-right: 4px;
-                    }
-                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
-
                     /* 文件过滤器标签 */
                     .filter-tag {
                         display: none;
@@ -320,7 +307,6 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                 <div class="search-container">
                     <div class="input-row">
                         <input type="text" id="searchInput" placeholder="${this._l10n.placeholder}" spellcheck="false">
-                        <div id="loader" class="loading-spinner"></div>
                         <div class="controls">
                             <div id="caseSensitive" class="control" title="${this._l10n.matchCase}">Aa</div>
                             <div id="wholeWord" class="control" title="Match Whole Word">ab</div>
@@ -344,7 +330,6 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     let activeFileFilter = null;
 
                     const searchInput = document.getElementById('searchInput');
-                    const loader = document.getElementById('loader');
                     const resultsContainer = document.getElementById('results');
                     const errorContainer = document.getElementById('error');
                     const regexToggle = document.getElementById('regex');
@@ -366,7 +351,6 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
 
                     function performSearch() {
                         errorContainer.style.display = 'none';
-                        loader.style.display = 'block'; // 显示加载动画
                         vscode.postMessage({
                             type: 'search',
                             value: searchInput.value,
@@ -406,6 +390,12 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         triggerSearch();
                     };
 
+                    searchInput.onkeydown = (e) => {
+                        if (e.key === 'Enter') {
+                            triggerSearch(true);
+                        }
+                    };
+
                     window.addEventListener('message', event => {
                         const message = event.data;
                         if (message.command === 'filterByFile') {
@@ -414,10 +404,7 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                             filterTag.style.display = 'flex';
                             searchInput.focus();
                             triggerSearch(true);
-                        } else if (message.type === 'searching') {
-                            loader.style.display = 'block';
                         } else if (message.type === 'results') {
-                            loader.style.display = 'none'; // 隐藏加载动画
                             if (message.error) {
                                 errorContainer.textContent = message.error;
                                 errorContainer.style.display = 'block';
