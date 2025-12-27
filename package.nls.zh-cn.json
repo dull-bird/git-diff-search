@@ -1,0 +1,16 @@
+{
+    "extension.description": "在Git面板中搜索所有未提交的修改内容（暂存、未暂存、未跟踪）",
+    "view.name": "搜索修改内容",
+    "command.focus.title": "聚焦搜索修改内容",
+    "webview.search.placeholder": "搜索修改内容...",
+    "webview.matchCase.title": "区分大小写",
+    "webview.useRegex.title": "正则表达式",
+    "webview.search.btn": "搜索",
+    "webview.noResults": "未找到结果",
+    "webview.invalidRegex": "无效的正则表达式",
+    "webview.searchFailed": "搜索失败",
+    "webview.staged": "STAGED",
+    "webview.unstaged": "UNSTAGED",
+    "webview.untracked": "UNTRACKED"
+}
+

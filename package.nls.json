@@ -1,0 +1,16 @@
+{
+    "extension.description": "Search all uncommitted changes (Staged, Unstaged, Untracked) in the Git panel",
+    "view.name": "Search Changes",
+    "command.focus.title": "Focus on Search Changes",
+    "webview.search.placeholder": "Search changes...",
+    "webview.matchCase.title": "Match Case",
+    "webview.useRegex.title": "Use Regular Expression",
+    "webview.search.btn": "Search",
+    "webview.noResults": "No results found",
+    "webview.invalidRegex": "Invalid regular expression",
+    "webview.searchFailed": "Search failed",
+    "webview.staged": "STAGED",
+    "webview.unstaged": "UNSTAGED",
+    "webview.untracked": "UNTRACKED"
+}
+
