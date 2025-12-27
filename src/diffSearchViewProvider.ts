@@ -294,6 +294,20 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         border: 1px solid var(--vscode-inputOption-activeBorder);
                         opacity: 1;
                     }
+
+                    /* 导航按钮样式 */
+                    .nav-controls {
+                        display: flex;
+                        gap: 2px;
+                        padding-left: 4px;
+                        margin-left: 4px;
+                        border-left: 1px solid var(--vscode-divider);
+                    }
+                    
+                    .result-item.selected {
+                        background: var(--vscode-list-focusBackground);
+                        color: var(--vscode-list-focusForeground);
+                    }
                     
                     /* 文件过滤器标签 */
                     .filter-tag {
@@ -347,6 +361,10 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                             <div id="wholeWord" class="control codicon codicon-whole-word" title="Match Whole Word"></div>
                             <div id="regex" class="control codicon codicon-regex" title="${this._l10n.useRegex}"></div>
                         </div>
+                        <div class="nav-controls">
+                            <div id="prevMatch" class="control codicon codicon-arrow-up" title="Previous Match"></div>
+                            <div id="nextMatch" class="control codicon codicon-arrow-down" title="Next Match"></div>
+                        </div>
                     </div>
                     <div id="filterTag" class="filter-tag">
                         <span>Current File Mode</span>
@@ -363,6 +381,9 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     let isCaseSensitive = false;
                     let isWholeWord = false;
                     let activeFileFilter = null;
+                    let selectedIndex = -1;
+                    let currentResultsCount = 0;
+                    let searchTimeout;
 
                     const searchInput = document.getElementById('searchInput');
                     const resultsContainer = document.getElementById('results');
@@ -370,11 +391,12 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     const regexToggle = document.getElementById('regex');
                     const caseToggle = document.getElementById('caseSensitive');
                     const wordToggle = document.getElementById('wholeWord');
+                    const prevBtn = document.getElementById('prevMatch');
+                    const nextBtn = document.getElementById('nextMatch');
                     const filterTag = document.getElementById('filterTag');
                     const filterFileName = document.getElementById('filterFileName');
                     const clearFilterBtn = document.getElementById('clearFilter');
 
-                    let searchTimeout;
                     function triggerSearch(immediate = false) {
                         clearTimeout(searchTimeout);
                         if (immediate) {
@@ -386,6 +408,7 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
 
                     function performSearch() {
                         errorContainer.style.display = 'none';
+                        selectedIndex = -1; // 重置选中项
                         vscode.postMessage({
                             type: 'search',
                             value: searchInput.value,
@@ -395,6 +418,31 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                             fileFilter: activeFileFilter
                         });
                     }
+
+                    function updateSelection(newIndex) {
+                        if (currentResultsCount === 0) return;
+                        
+                        // 移除之前的选中状态
+                        const items = resultsContainer.querySelectorAll('.result-item');
+                        if (selectedIndex >= 0 && selectedIndex < items.length) {
+                            items[selectedIndex].classList.remove('selected');
+                        }
+
+                        // 循环选择
+                        selectedIndex = (newIndex + currentResultsCount) % currentResultsCount;
+                        
+                        // 添加新的选中状态并滚动到视图中
+                        const newSelectedItem = items[selectedIndex];
+                        if (newSelectedItem) {
+                            newSelectedItem.classList.add('selected');
+                            newSelectedItem.scrollIntoView({ block: 'nearest' });
+                            // 自动打开对应的 Diff
+                            openDiff(selectedIndex);
+                        }
+                    }
+
+                    prevBtn.onclick = () => updateSelection(selectedIndex - 1);
+                    nextBtn.onclick = () => updateSelection(selectedIndex + 1);
 
                     regexToggle.onclick = () => {
                         isRegex = !isRegex;
@@ -444,7 +492,9 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                                 errorContainer.textContent = message.error;
                                 errorContainer.style.display = 'block';
                                 resultsContainer.innerHTML = '';
+                                currentResultsCount = 0;
                             } else {
+                                currentResultsCount = message.results.length;
                                 renderResults(message.results);
                             }
                         }
@@ -462,21 +512,28 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                             'untracked': '${this._l10n.untracked}'
                         };
 
-                        resultsContainer.innerHTML = results.map((r, index) => \`
-                            <div class="result-item" onclick="openDiff(\${index})">
-                                <div class="file-info">
-                                    <div style="display: flex; align-items: center; overflow: hidden;">
-                                        <span class="file-name" title="\${r.file}">\${r.file}</span>
-                                        <span class="change-tag tag-\${r.changeType}">\${typeLabels[r.changeType]}</span>
-                                    </div>
-                                    <span class="line-num">L\${r.lineNumber}</span>
-                                </div>
-                                <div class="line-content \${r.type}">\${escapeHtml(r.content)}</div>
-                            </div>
-                        \`).join('');
+                        resultsContainer.innerHTML = results.map((r, index) => {
+                            const isSelected = index === selectedIndex ? 'selected' : '';
+                            return '<div class="result-item ' + isSelected + '" onclick="openDiff(' + index + ')">' +
+                                '<div class="file-info">' +
+                                    '<div style="display: flex; align-items: center; overflow: hidden;">' +
+                                        '<span class="file-name" title="' + r.file + '">' + r.file + '</span>' +
+                                        '<span class="change-tag tag-' + r.changeType + '">' + typeLabels[r.changeType] + '</span>' +
+                                    '</div>' +
+                                    '<span class="line-num">L' + r.lineNumber + '</span>' +
+                                '</div>' +
+                                '<div class="line-content ' + r.type + '">' + escapeHtml(r.content) + '</div>' +
+                            '</div>';
+                        }).join('');
                     }
 
                     function openDiff(index) {
+                        selectedIndex = index;
+                        // 更新列表中的选中状态
+                        const items = resultsContainer.querySelectorAll('.result-item');
+                        items.forEach((item, i) => {
+                            item.classList.toggle('selected', i === index);
+                        });
                         vscode.postMessage({ type: 'openDiff', index });
                     }
 
