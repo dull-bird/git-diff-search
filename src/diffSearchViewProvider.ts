@@ -398,10 +398,12 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         font-size: 16px; 
                         color: var(--vscode-input-foreground);
                         opacity: 0.8;
+                        line-height: 1;
                     }
-                    /* 核心修复：专门针对方框内部的图标文字进行下移，而不动方框本身 */
+                    /* Codicons 图标微调：确保图标内容垂直居中 */
                     .control.codicon::before {
-                        transform: translateY(2px);
+                        display: block;
+                        line-height: 22px;
                     }
                     .control:hover { background: var(--vscode-toolbar-hoverBackground); opacity: 1; }
                     .control.active { 
@@ -414,6 +416,7 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     /* 导航按钮样式 */
                     .nav-controls {
                         display: flex;
+                        align-items: center;
                         gap: 2px;
                         padding-left: 4px;
                         margin-left: 4px;
