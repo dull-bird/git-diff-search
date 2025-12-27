@@ -1,238 +1,354 @@
-import * as vscode from 'vscode';
-import * as path from 'path';
-import * as fs from 'fs';
-import { GitDiffProvider, DiffLine } from './gitDiffProvider';
+import * as vscode from "vscode";
+import * as path from "path";
+import * as fs from "fs";
+import { GitDiffProvider, DiffLine } from "./gitDiffProvider";
 
 export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
-    public static readonly viewType = 'gitDiffSearch';
-    private _view?: vscode.WebviewView;
-    private _currentResults: DiffLine[] = [];
-    private _l10n: any;
-    private _activeFileFilter?: { file: string, changeType: string };
-    private _pendingMessage?: any;
+  public static readonly viewType = "gitDiffSearch";
+  private _view?: vscode.WebviewView;
+  private _currentResults: DiffLine[] = [];
+  private _l10n: any;
+  private _activeFileFilter?: { file: string; changeType: string };
+  private _pendingMessage?: any;
 
-    constructor(
-        private readonly _extensionUri: vscode.Uri,
-        private readonly _gitDiffProvider: GitDiffProvider
-    ) {
-        // 初始化语言包
-        this._initL10n();
+  constructor(
+    private readonly _extensionUri: vscode.Uri,
+    private readonly _gitDiffProvider: GitDiffProvider
+  ) {
+    // 初始化语言包
+    this._initL10n();
+  }
+
+  public postMessage(message: any) {
+    if (this._view) {
+      this._view.webview.postMessage(message);
+    } else {
+      // 如果 Webview 还没加载（处于折叠状态），先存起来
+      this._pendingMessage = message;
+    }
+  }
+
+  private _initL10n() {
+    const lang = vscode.env.language.toLowerCase();
+    let nlsPath: string;
+
+    // 这里的路径需要相对于编译后的文件位置
+    // 编译后在 out/diffSearchViewProvider.js，package.nls.json 在根目录
+    const rootPath = path.join(this._extensionUri.fsPath);
+
+    if (lang === "zh-cn" || lang === "zh-tw") {
+      nlsPath = path.join(rootPath, "package.nls.zh-cn.json");
+    } else {
+      nlsPath = path.join(rootPath, "package.nls.json");
     }
 
-    public postMessage(message: any) {
-        if (this._view) {
-            this._view.webview.postMessage(message);
-        } else {
-            // 如果 Webview 还没加载（处于折叠状态），先存起来
-            this._pendingMessage = message;
+    let nls: any = {};
+    try {
+      if (fs.existsSync(nlsPath)) {
+        const content = fs.readFileSync(nlsPath, "utf8");
+        nls = JSON.parse(content);
+      } else {
+        // 回退到默认英文包
+        const defaultPath = path.join(rootPath, "package.nls.json");
+        if (fs.existsSync(defaultPath)) {
+          nls = JSON.parse(fs.readFileSync(defaultPath, "utf8"));
         }
+      }
+    } catch (e) {
+      console.error("Failed to load nls file:", e);
     }
 
-    private _initL10n() {
-        const lang = vscode.env.language.toLowerCase();
-        let nlsPath: string;
-        
-        // 这里的路径需要相对于编译后的文件位置
-        // 编译后在 out/diffSearchViewProvider.js，package.nls.json 在根目录
-        const rootPath = path.join(this._extensionUri.fsPath);
-        
-        if (lang === 'zh-cn' || lang === 'zh-tw') {
-            nlsPath = path.join(rootPath, 'package.nls.zh-cn.json');
-        } else {
-            nlsPath = path.join(rootPath, 'package.nls.json');
-        }
+    this._l10n = {
+      placeholder: nls["webview.search.placeholder"] || "Search changes...",
+      matchCase: nls["webview.matchCase.title"] || "Match Case",
+      useRegex: nls["webview.useRegex.title"] || "Use Regular Expression",
+      searchBtn: nls["webview.search.btn"] || "Search",
+      noResults: nls["webview.noResults"] || "No results found",
+      invalidRegex: nls["webview.invalidRegex"] || "Invalid regular expression",
+      searchFailed: nls["webview.searchFailed"] || "Search failed",
+      staged: nls["webview.staged"] || "STAGED",
+      unstaged: nls["webview.unstaged"] || "UNSTAGED",
+      untracked: nls["webview.untracked"] || "UNTRACKED",
+    };
 
-        let nls: any = {};
-        try {
-            if (fs.existsSync(nlsPath)) {
-                const content = fs.readFileSync(nlsPath, 'utf8');
-                nls = JSON.parse(content);
-            } else {
-                // 回退到默认英文包
-                const defaultPath = path.join(rootPath, 'package.nls.json');
-                if (fs.existsSync(defaultPath)) {
-                    nls = JSON.parse(fs.readFileSync(defaultPath, 'utf8'));
-                }
-            }
-        } catch (e) {
-            console.error('Failed to load nls file:', e);
-        }
+    // 如果是中文，保持之前要求的 STAGED/UNSTAGED 英文显示，或者根据需要调整
+    // 用户之前说“统一使用英文”，所以这里保持 STAGED 等为英文
+  }
 
-        this._l10n = {
-            placeholder: nls['webview.search.placeholder'] || "Search changes...",
-            matchCase: nls['webview.matchCase.title'] || "Match Case",
-            useRegex: nls['webview.useRegex.title'] || "Use Regular Expression",
-            searchBtn: nls['webview.search.btn'] || "Search",
-            noResults: nls['webview.noResults'] || "No results found",
-            invalidRegex: nls['webview.invalidRegex'] || "Invalid regular expression",
-            searchFailed: nls['webview.searchFailed'] || "Search failed",
-            staged: nls['webview.staged'] || "STAGED",
-            unstaged: nls['webview.unstaged'] || "UNSTAGED",
-            untracked: nls['webview.untracked'] || "UNTRACKED"
-        };
-        
-        // 如果是中文，保持之前要求的 STAGED/UNSTAGED 英文显示，或者根据需要调整
-        // 用户之前说“统一使用英文”，所以这里保持 STAGED 等为英文
-    }
+  public resolveWebviewView(
+    webviewView: vscode.WebviewView,
+    context: vscode.WebviewViewResolveContext,
+    _token: vscode.CancellationToken
+  ) {
+    this._view = webviewView;
 
-    public resolveWebviewView(
-        webviewView: vscode.WebviewView,
-        context: vscode.WebviewViewResolveContext,
-        _token: vscode.CancellationToken,
-    ) {
-        this._view = webviewView;
+    webviewView.webview.options = {
+      enableScripts: true,
+      localResourceRoots: [
+        this._extensionUri,
+        vscode.Uri.joinPath(
+          this._extensionUri,
+          "node_modules",
+          "@vscode/codicons",
+          "dist"
+        ),
+      ],
+    };
 
-        webviewView.webview.options = {
-            enableScripts: true,
-            localResourceRoots: [
-                this._extensionUri,
-                vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist')
-            ]
-        };
+    webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
 
-        webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
-
-        // 如果有待处理的消息，等 Webview 加载完立即发送
+    // 如果有待处理的消息，等 Webview 加载完立即发送
+    if (this._pendingMessage) {
+      // 给 Webview 一点初始化脚本的时间
+      setTimeout(() => {
         if (this._pendingMessage) {
-            // 给 Webview 一点初始化脚本的时间
-            setTimeout(() => {
-                if (this._pendingMessage) {
-                    webviewView.webview.postMessage(this._pendingMessage);
-                    this._pendingMessage = undefined;
-                }
-            }, 500);
+          webviewView.webview.postMessage(this._pendingMessage);
+          this._pendingMessage = undefined;
         }
-
-        webviewView.webview.onDidReceiveMessage(async (data) => {
-            switch (data.type) {
-                case 'search':
-                    this._activeFileFilter = data.fileFilter;
-                    this._view?.webview.postMessage({ type: 'searching' }); // 通知 Webview 开始搜索
-                    await this._handleSearch(data.value, data.isRegex, data.isCaseSensitive, data.isWholeWord);
-                    break;
-                case 'openDiff':
-                    const result = this._currentResults[data.index];
-                    if (result) {
-                        await this._openDiff(result.file, result.lineNumber, result.changeType);
-                    }
-                    break;
-                case 'clearFilter':
-                    this._activeFileFilter = undefined;
-                    break;
-            }
-        });
+      }, 500);
     }
 
-    private async _handleSearch(query: string, isRegex: boolean, isCaseSensitive: boolean, isWholeWord: boolean) {
-        if (!query) {
-            this._currentResults = [];
-            this._view?.webview.postMessage({ type: 'results', results: [] });
-            return;
-        }
-
-        try {
-            const allChanges = await this._gitDiffProvider.getParsedDiff();
-            let results: DiffLine[] = [];
-            
-            // 基础过滤：排除 context 行，如果有关联文件则只搜当前文件
-            let filteredChanges = allChanges.filter(line => line.type !== 'context');
-            if (this._activeFileFilter) {
-                filteredChanges = filteredChanges.filter(line => 
-                    line.file.toLowerCase() === this._activeFileFilter!.file.toLowerCase() &&
-                    line.changeType === this._activeFileFilter!.changeType
-                );
-            }
-
-            let regexSource = isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            if (isWholeWord) {
-                regexSource = `\\b${regexSource}\\b`;
-            }
-
-            try {
-                const flags = isCaseSensitive ? '' : 'i';
-                const regex = new RegExp(regexSource, flags);
-                results = filteredChanges.filter(line => regex.test(line.content));
-            } catch (e) {
-                this._view?.webview.postMessage({ type: 'results', results: [], error: this._l10n.invalidRegex });
-                return;
-            }
-
-            this._currentResults = results;
-            this._view?.webview.postMessage({ type: 'results', results });
-        } catch (error: any) {
-            vscode.window.showErrorMessage(`${this._l10n.searchFailed}: ${error.message}`);
-        }
-    }
-
-    private async _openDiff(filePath: string, lineNumber: number, changeType: 'working' | 'staged' | 'untracked') {
-        try {
-            const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
-            if (!workspaceFolder) return;
-
-            const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
-            const fileName = filePath.split(/[\\/]/).pop();
-
-            if (changeType === 'untracked') {
-                await this._openFile(fullPath, lineNumber);
-                return;
-            }
-
-            const gitExtension = vscode.extensions.getExtension('vscode.git')?.exports;
-            if (!gitExtension) {
-                await this._openFile(fullPath, lineNumber);
-                return;
-            }
-
-            let leftUri: vscode.Uri;
-            let rightUri: vscode.Uri;
-            let label: string;
-
-            if (changeType === 'staged') {
-                leftUri = fullPath.with({ 
-                    scheme: 'git', 
-                    query: JSON.stringify({ path: fullPath.fsPath, ref: 'HEAD' }) 
-                });
-                rightUri = fullPath.with({ 
-                    scheme: 'git', 
-                    query: JSON.stringify({ path: fullPath.fsPath, ref: '~' }) 
-                });
-                label = 'Index';
-            } else {
-                leftUri = fullPath.with({ 
-                    scheme: 'git', 
-                    query: JSON.stringify({ path: fullPath.fsPath, ref: '~' }) 
-                });
-                rightUri = fullPath;
-                label = 'Working Tree';
-            }
-
-            await vscode.commands.executeCommand('vscode.diff', 
-                leftUri, 
-                rightUri, 
-                `${fileName} (${label})`,
-                {
-                    selection: new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0),
-                    preview: true
-                }
+    webviewView.webview.onDidReceiveMessage(async (data) => {
+      switch (data.type) {
+        case "search":
+          this._activeFileFilter = data.fileFilter;
+          this._view?.webview.postMessage({ type: "searching" }); // 通知 Webview 开始搜索
+          await this._handleSearch(
+            data.value,
+            data.isRegex,
+            data.isCaseSensitive,
+            data.isWholeWord
+          );
+          break;
+        case "openDiff":
+          const result = this._currentResults[data.index];
+          if (result) {
+            await this._openDiff(
+              result.file,
+              result.lineNumber,
+              result.changeType,
+              result.type as "added" | "removed"
             );
-        } catch (err: any) {
-            vscode.window.showErrorMessage(`Failed to open diff view: ${err.message}`);
-        }
+          }
+          break;
+        case "clearFilter":
+          this._activeFileFilter = undefined;
+          break;
+      }
+    });
+  }
+
+  private async _handleSearch(
+    query: string,
+    isRegex: boolean,
+    isCaseSensitive: boolean,
+    isWholeWord: boolean
+  ) {
+    if (!query) {
+      this._currentResults = [];
+      this._view?.webview.postMessage({ type: "results", results: [] });
+      return;
     }
 
-    private async _openFile(uri: vscode.Uri, lineNumber: number) {
-        const doc = await vscode.workspace.openTextDocument(uri);
-        await vscode.window.showTextDocument(doc, {
-            selection: new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0),
-            preview: true
+    try {
+      const allChanges = await this._gitDiffProvider.getParsedDiff();
+      let results: DiffLine[] = [];
+
+      // 基础过滤：排除 context 行，如果有关联文件则只搜当前文件
+      let filteredChanges = allChanges.filter(
+        (line) => line.type !== "context"
+      );
+      if (this._activeFileFilter) {
+        filteredChanges = filteredChanges.filter(
+          (line) =>
+            line.file.toLowerCase() ===
+              this._activeFileFilter!.file.toLowerCase() &&
+            line.changeType === this._activeFileFilter!.changeType
+        );
+      }
+
+      let regexSource = isRegex
+        ? query
+        : query.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      if (isWholeWord) {
+        regexSource = `\\b${regexSource}\\b`;
+      }
+
+      try {
+        const flags = isCaseSensitive ? "" : "i";
+        const regex = new RegExp(regexSource, flags);
+        results = filteredChanges.filter((line) => regex.test(line.content));
+      } catch (e) {
+        this._view?.webview.postMessage({
+          type: "results",
+          results: [],
+          error: this._l10n.invalidRegex,
         });
+        return;
+      }
+
+      this._currentResults = results;
+      this._view?.webview.postMessage({ type: "results", results });
+    } catch (error: any) {
+      vscode.window.showErrorMessage(
+        `${this._l10n.searchFailed}: ${error.message}`
+      );
     }
+  }
 
-    private _getHtmlForWebview(webview: vscode.Webview) {
-        // 关键修改：直接从本地 node_modules 加载，不依赖任何网络
-        const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
+  private async _openDiff(
+    filePath: string,
+    lineNumber: number,
+    changeType: "working" | "staged" | "untracked",
+    lineType?: "added" | "removed"
+  ) {
+    try {
+      const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+      if (!workspaceFolder) return;
 
-        return `<!DOCTYPE html>
+      const fullPath = vscode.Uri.joinPath(workspaceFolder.uri, filePath);
+      const fileName = filePath.split(/[\\/]/).pop();
+
+      if (changeType === "untracked") {
+        await this._openFile(fullPath, lineNumber);
+        return;
+      }
+
+      let leftUri: vscode.Uri;
+      let rightUri: vscode.Uri;
+      let label: string;
+
+      if (changeType === "staged") {
+        leftUri = fullPath.with({
+          scheme: "git",
+          query: JSON.stringify({ path: fullPath.fsPath, ref: "HEAD" }),
+        });
+        rightUri = fullPath.with({
+          scheme: "git",
+          query: JSON.stringify({ path: fullPath.fsPath, ref: "~" }),
+        });
+        label = "Index";
+      } else {
+        leftUri = fullPath.with({
+          scheme: "git",
+          query: JSON.stringify({ path: fullPath.fsPath, ref: "~" }),
+        });
+        rightUri = fullPath;
+        label = "Working Tree";
+      }
+
+      // 准备打开选项
+      const options: vscode.TextDocumentShowOptions = {
+        preview: true,
+        preserveFocus: false, // 确保焦点离开 Webview 进入编辑器
+      };
+
+      // 关键：只有当是新增(added)时，才在打开时传 selection（因为 selection 默认作用于右侧）
+      if (lineType !== "removed") {
+        options.selection = new vscode.Range(
+          lineNumber - 1,
+          0,
+          lineNumber - 1,
+          0
+        );
+      }
+
+      // 打开 Diff 视图
+      await vscode.commands.executeCommand(
+        "vscode.diff",
+        leftUri,
+        rightUri,
+        `${fileName} (${label})`,
+        options
+      );
+
+      // 针对"已删除"行的特殊处理（精准定位到左侧/红色区域）
+      if (lineType === "removed") {
+        let attempts = 0;
+        const maxAttempts = 40; // 增加到 2秒左右，因为加载大文件 Diff 较慢
+
+        const findAndFocusLeft = setInterval(async () => {
+          attempts++;
+
+          // 获取当前活动的编辑器组中的活动 Tab
+          const activeTab = vscode.window.tabGroups.activeTabGroup.activeTab;
+
+          if (activeTab && activeTab.input instanceof vscode.TabInputTextDiff) {
+            const originalUri = activeTab.input.original;
+
+            // 在可见编辑器中锁定左侧编辑器
+            // 注意：有时候 toString 匹配会因为编码问题失效，增加 path 匹配作为兜底
+            const leftEditor = vscode.window.visibleTextEditors.find(
+              (e) =>
+                e.document.uri.toString() === originalUri.toString() ||
+                (e.document.uri.path === originalUri.path &&
+                  e.document.uri.scheme === originalUri.scheme)
+            );
+
+            if (leftEditor) {
+              clearInterval(findAndFocusLeft);
+
+              const pos = new vscode.Position(lineNumber - 1, 0);
+
+              // 1. 设置光标位置（Selection 的起始和结束点相同即为光标）
+              leftEditor.selection = new vscode.Selection(pos, pos);
+
+              // 2. 滚动到视野中心
+              leftEditor.revealRange(
+                new vscode.Range(pos, pos),
+                vscode.TextEditorRevealType.InCenter
+              );
+
+              // 3. 【关键】强制切换焦点到左侧
+              // 第一次尝试：立即切换
+              await vscode.commands.executeCommand(
+                "workbench.action.compareEditor.focusPrimarySide"
+              );
+
+              // 第二次尝试：延迟 100ms 再次切换
+              // 因为 vscode.diff 打开后的内置聚焦逻辑可能会把焦点"抢"回右侧，
+              // 这里的延迟执行可以确保在系统稳定后最终把焦点定在左侧。
+              setTimeout(() => {
+                vscode.commands.executeCommand(
+                  "workbench.action.compareEditor.focusPrimarySide"
+                );
+              }, 100);
+            }
+          }
+
+          if (attempts >= maxAttempts) {
+            clearInterval(findAndFocusLeft);
+          }
+        }, 50);
+      }
+    } catch (err: any) {
+      vscode.window.showErrorMessage(
+        `Failed to open diff view: ${err.message}`
+      );
+    }
+  }
+
+  private async _openFile(uri: vscode.Uri, lineNumber: number) {
+    const doc = await vscode.workspace.openTextDocument(uri);
+    await vscode.window.showTextDocument(doc, {
+      selection: new vscode.Range(lineNumber - 1, 0, lineNumber - 1, 0),
+      preview: true,
+    });
+  }
+
+  private _getHtmlForWebview(webview: vscode.Webview) {
+    // 关键修改：直接从本地 node_modules 加载，不依赖任何网络
+    const codiconsUri = webview.asWebviewUri(
+      vscode.Uri.joinPath(
+        this._extensionUri,
+        "node_modules",
+        "@vscode/codicons",
+        "dist",
+        "codicon.css"
+      )
+    );
+
+    return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
@@ -545,5 +661,5 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                 </script>
             </body>
             </html>`;
-    }
+  }
 }
