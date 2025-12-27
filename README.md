@@ -4,7 +4,9 @@ A VS Code extension for searching and navigating through uncommitted Git changes
 
 ## Screenshot
 
-![](https://raw.githubusercontent.com/dull-bird/git-diff-search/main/assets/screenshot.png)
+![](https://raw.githubusercontent.com/dull-bird/git-diff-search/main/assets/screenshot_global.png)
+
+![](https://raw.githubusercontent.com/dull-bird/git-diff-search/main/assets/screenshot_file.png)
 
 ## Features
 
