@@ -1,121 +1,66 @@
-# Git Diff Search - VS Code 扩展
+# Git Diff Search
 
-一个强大的 VS Code 扩展，用于搜索和可视化所有未提交的 Git 修改。
+A VS Code extension for searching and navigating through uncommitted Git changes.
 
-## 功能特性
+## Features
 
-- 🔍 **全面搜索**: 搜索所有未提交的修改，包括：
-  - 📝 **工作区修改**：已修改但未暂存的文件
-  - ✅ **暂存区修改**：已暂存但未提交的文件
-  - 🆕 **未跟踪文件**：新添加但未跟踪的文件
-- 📊 **可视化展示**: 美观的界面展示所有修改内容和搜索结果
-- 🎨 **语法高亮**: 区分添加、删除和上下文行
-- 🔎 **高级搜索**: 
-  - 支持区分大小写搜索
-  - 支持正则表达式搜索（勾选 `.*` 选项）
-  - VS Code 风格的搜索界面
-- 📁 **文件定位**: 显示匹配结果的文件路径和行号
-- 🖱️ **点击跳转**: 点击搜索结果直接跳转到文件对应行或diff视图
-- 🔄 **自动刷新**: 可以随时刷新获取最新的修改内容
-- 📋 **分类显示**: 清晰区分工作区、暂存区和未跟踪文件的修改
+### 🔍 Global Search in Git Changes
 
-## 使用方法
+Search across all uncommitted modifications in your repository:
 
-### 方法一：通过命令面板
+- **Staged changes (Index)** – Changes added to the staging area
+- **Unstaged changes (Working Tree)** – Modified files not yet staged  
+- **Untracked files** – New files not added to Git
 
-1. 按 `Cmd+Shift+P` (Mac) 或 `Ctrl+Shift+P` (Windows/Linux) 打开命令面板
-2. 输入 "在Git Diff中搜索" 或 "Git Diff Search"
-3. 选择命令后，会打开搜索面板
+### 📂 File-Specific Search
 
-### 方法二：通过 Source Control 面板
+Click the search icon in the Diff editor title bar to search within a specific file's changes. The search will be scoped to:
 
-1. 打开 VS Code 的 Source Control 面板（左侧边栏的 Git 图标）
-2. 点击标题栏中的搜索图标 🔍
-3. 搜索面板会自动打开
+- Index changes when viewing a staged file diff
+- Working Tree changes when viewing an unstaged file diff
 
-## 功能说明
+### 🎛️ Search Options
 
-### 搜索功能
+- **Match Case (Aa)** – Case-sensitive search
+- **Whole Word (ab)** – Match whole words only
+- **Regex (.*)** – Regular expression support
 
-- 在搜索框中输入关键词
-- **搜索选项**：
-  - `Aa` - 区分大小写：勾选后进行精确大小写匹配
-  - `.*` - 正则表达式：勾选后支持正则表达式搜索
-- 点击"搜索"按钮或按 Enter 键执行搜索
-- 搜索结果会高亮显示匹配的内容
-- **搜索范围包括**：
-  - 工作区的所有修改（相对于暂存区）
-  - 暂存区的所有修改（相对于上次提交）
-  - 所有未跟踪文件的内容
+## Usage
 
-### 搜索结果
+### Method 1: Source Control Panel
 
-搜索结果会显示：
-- 📄 文件路径（可点击）
-- 📍 行号
-- 📝 匹配的行内容（高亮显示）
-- 🎨 颜色标识（绿色=添加，红色=删除）
-- 🏷️ 类型标签（显示"添加"或"删除"）
+1. Open the Source Control panel (Git icon in the sidebar)
+2. Find the **Git Diff Search** view
+3. Type your search query and press Enter
+4. Click on any result to open the native Diff view
 
-### 点击跳转
+### Method 2: From a Diff View
 
-- **点击任意搜索结果**可以：
-  - 对于**添加的行**：直接打开文件并定位到对应行
-  - 对于**删除的行**：打开文件（如果存在）或提示在SCM面板查看diff
-- 鼠标悬停在结果上会有高亮效果，提示可点击
+1. Open any file's diff (staged or unstaged)
+2. Click the 🔍 search icon in the editor title bar
+3. The search will be scoped to that specific file
 
-### 修改类型
+## Search Results
 
-界面会清晰显示三种类型的修改：
-- **工作区修改（未暂存）**：显示你修改了但还没有 `git add` 的内容
-- **暂存区修改（已暂存）**：显示你已经 `git add` 但还没有提交的内容
-- **未跟踪的文件**：显示新创建但还没有添加到 Git 的文件
+Each result displays:
 
-### 刷新功能
+- **File path** and **line number**
+- **Change type label**: `STAGED`, `UNSTAGED`, or `UNTRACKED`
+- **Line content** with visual indicator:
+  - 🟢 Green border = Added line
+  - 🔴 Red border = Removed line
 
-点击"刷新Diff"按钮可以获取最新的所有未提交修改。
+Click any result to jump directly to that line in the native VS Code Diff view.
 
-## 开发
+## Navigation
 
-### 前置要求
+Use the **↑** and **↓** buttons to navigate through search results sequentially.
 
-- Node.js
-- VS Code
-- TypeScript
+## Requirements
 
-### 安装依赖
+- VS Code 1.74.0 or higher
+- Git installed and available in PATH
 
-```bash
-npm install
-```
-
-### 编译
-
-```bash
-npm run compile
-```
-
-### 运行和调试
-
-1. 在 VS Code 中打开此项目
-2. 按 `F5` 启动调试
-3. 会打开一个新的 VS Code 窗口（扩展开发宿主）
-4. 在新窗口中测试扩展功能
-
-### 打包
-
-```bash
-npm install -g vsce
-vsce package
-```
-
-## 技术实现
-
-- **Git Diff Provider**: 使用 `git diff` 命令获取未提交的修改
-- **Webview Panel**: 使用 VS Code 的 Webview API 创建可视化界面
-- **消息传递**: 使用 `postMessage` 在扩展和 Webview 之间通信
-
-## 许可证
+## License
 
 MIT
-
