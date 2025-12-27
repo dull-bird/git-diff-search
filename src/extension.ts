@@ -11,14 +11,14 @@ export function activate(context: vscode.ExtensionContext) {
     context.subscriptions.push(
         vscode.window.registerWebviewViewProvider(
             DiffSearchViewProvider.viewType,
-            provider
+            provider,
+            {
+                webviewOptions: {
+                    retainContextWhenHidden: true // 关键：切换侧边栏标签时不销毁上下文，保留输入和结果
+                }
+            }
         )
     );
-
-    // 聚焦命令
-    const focusCommand = vscode.commands.registerCommand('gitDiffSearch.focus', async () => {
-        await vscode.commands.executeCommand('workbench.view.scm');
-    });
 
     // 搜索当前激活的 Diff 命令
     const searchInActiveDiffCommand = vscode.commands.registerCommand('gitDiffSearch.searchInActiveDiff', async () => {
@@ -46,10 +46,14 @@ export function activate(context: vscode.ExtensionContext) {
 
         const relativePath = path.relative(workspaceFolder.uri.fsPath, filePath).replace(/\\/g, '/');
 
-        // 1. 强制打开侧边栏
+        // 1. 强制激活源代码管理侧边栏 (SCM)
+        await vscode.commands.executeCommand('workbench.view.scm');
+        
+        // 2. 强制展开并聚焦我们的搜索视图
+        // 即使侧边栏之前是收起的，这也会把它拉出来
         await vscode.commands.executeCommand('gitDiffSearch.focus');
         
-        // 2. 通知 Webview 进入“当前文件模式”
+        // 3. 通知 Webview 进入“当前文件模式”
         provider.postMessage({
             command: 'filterByFile',
             data: {
@@ -59,7 +63,7 @@ export function activate(context: vscode.ExtensionContext) {
         });
     });
 
-    context.subscriptions.push(focusCommand, searchInActiveDiffCommand);
+    context.subscriptions.push(searchInActiveDiffCommand);
 }
 
 export function deactivate() {}

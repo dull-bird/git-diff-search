@@ -9,6 +9,7 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
     private _currentResults: DiffLine[] = [];
     private _l10n: any;
     private _activeFileFilter?: { file: string, changeType: string };
+    private _pendingMessage?: any;
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -19,7 +20,12 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
     }
 
     public postMessage(message: any) {
-        this._view?.webview.postMessage(message);
+        if (this._view) {
+            this._view.webview.postMessage(message);
+        } else {
+            // 如果 Webview 还没加载（处于折叠状态），先存起来
+            this._pendingMessage = message;
+        }
     }
 
     private _initL10n() {
@@ -78,10 +84,24 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
 
         webviewView.webview.options = {
             enableScripts: true,
-            localResourceRoots: [this._extensionUri]
+            localResourceRoots: [
+                this._extensionUri,
+                vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist')
+            ]
         };
 
         webviewView.webview.html = this._getHtmlForWebview(webviewView.webview);
+
+        // 如果有待处理的消息，等 Webview 加载完立即发送
+        if (this._pendingMessage) {
+            // 给 Webview 一点初始化脚本的时间
+            setTimeout(() => {
+                if (this._pendingMessage) {
+                    webviewView.webview.postMessage(this._pendingMessage);
+                    this._pendingMessage = undefined;
+                }
+            }, 500);
+        }
 
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
@@ -209,10 +229,16 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
     }
 
     private _getHtmlForWebview(webview: vscode.Webview) {
+        // 关键修改：直接从本地 node_modules 加载，不依赖任何网络
+        const codiconsUri = webview.asWebviewUri(vscode.Uri.joinPath(this._extensionUri, 'node_modules', '@vscode/codicons', 'dist', 'codicon.css'));
+
         return `<!DOCTYPE html>
             <html lang="en">
             <head>
                 <meta charset="UTF-8">
+                <meta http-equiv="Content-Security-Policy" content="default-src 'none'; font-src ${webview.cspSource}; style-src ${webview.cspSource} 'unsafe-inline'; script-src 'unsafe-inline';">
+                <!-- 引入 VS Code 原生图标库 -->
+                <link href="${codiconsUri}" rel="stylesheet" />
                 <style>
                     body { padding: 0; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: 13px; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
                     .search-container { padding: 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--vscode-divider); flex-shrink: 0; }
@@ -239,7 +265,12 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         min-width: 0;
                     }
                     
-                    .controls { display: flex; gap: 1px; padding-right: 2px; align-items: center; }
+                    .controls { 
+                        display: flex; 
+                        gap: 1px; 
+                        padding-right: 2px; 
+                        align-items: center; 
+                    }
                     .control { 
                         cursor: pointer; 
                         display: flex; 
@@ -248,9 +279,13 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         width: 22px; 
                         height: 22px; 
                         border-radius: 3px; 
-                        font-size: 12px;
+                        font-size: 16px; 
                         color: var(--vscode-input-foreground);
                         opacity: 0.8;
+                    }
+                    /* 核心修复：专门针对方框内部的图标文字进行下移，而不动方框本身 */
+                    .control.codicon::before {
+                        transform: translateY(2px);
                     }
                     .control:hover { background: var(--vscode-toolbar-hoverBackground); opacity: 1; }
                     .control.active { 
@@ -308,9 +343,9 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     <div class="input-row">
                         <input type="text" id="searchInput" placeholder="${this._l10n.placeholder}" spellcheck="false">
                         <div class="controls">
-                            <div id="caseSensitive" class="control" title="${this._l10n.matchCase}">Aa</div>
-                            <div id="wholeWord" class="control" title="Match Whole Word">ab</div>
-                            <div id="regex" class="control" title="${this._l10n.useRegex}">.*</div>
+                            <div id="caseSensitive" class="control codicon codicon-case-sensitive" title="${this._l10n.matchCase}"></div>
+                            <div id="wholeWord" class="control codicon codicon-whole-word" title="Match Whole Word"></div>
+                            <div id="regex" class="control codicon codicon-regex" title="${this._l10n.useRegex}"></div>
                         </div>
                     </div>
                     <div id="filterTag" class="filter-tag">

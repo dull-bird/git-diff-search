@@ -34,7 +34,7 @@
       {
         "command": "gitDiffSearch.searchInActiveDiff",
         "title": "%command.searchInActiveDiff.title%",
-        "icon": "$(search)"
+        "icon": "$(search-fuzzy)"
       }
     ],
     "menus": {
@@ -64,5 +64,7 @@
     "@types/node": "16.x",
     "typescript": "^4.9.4"
   },
-  "dependencies": {}
+  "dependencies": {
+    "@vscode/codicons": "^0.0.33"
+  }
 }
