@@ -8,6 +8,7 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
     private _view?: vscode.WebviewView;
     private _currentResults: DiffLine[] = [];
     private _l10n: any;
+    private _activeFileFilter?: { file: string, changeType: string };
 
     constructor(
         private readonly _extensionUri: vscode.Uri,
@@ -15,6 +16,10 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
     ) {
         // 初始化语言包
         this._initL10n();
+    }
+
+    public postMessage(message: any) {
+        this._view?.webview.postMessage(message);
     }
 
     private _initL10n() {
@@ -81,7 +86,9 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
         webviewView.webview.onDidReceiveMessage(async (data) => {
             switch (data.type) {
                 case 'search':
-                    await this._handleSearch(data.value, data.isRegex, data.isCaseSensitive);
+                    this._activeFileFilter = data.fileFilter;
+                    this._view?.webview.postMessage({ type: 'searching' }); // 通知 Webview 开始搜索
+                    await this._handleSearch(data.value, data.isRegex, data.isCaseSensitive, data.isWholeWord);
                     break;
                 case 'openDiff':
                     const result = this._currentResults[data.index];
@@ -89,11 +96,14 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                         await this._openDiff(result.file, result.lineNumber, result.changeType);
                     }
                     break;
+                case 'clearFilter':
+                    this._activeFileFilter = undefined;
+                    break;
             }
         });
     }
 
-    private async _handleSearch(query: string, isRegex: boolean, isCaseSensitive: boolean) {
+    private async _handleSearch(query: string, isRegex: boolean, isCaseSensitive: boolean, isWholeWord: boolean) {
         if (!query) {
             this._currentResults = [];
             this._view?.webview.postMessage({ type: 'results', results: [] });
@@ -104,22 +114,27 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
             const allChanges = await this._gitDiffProvider.getParsedDiff();
             let results: DiffLine[] = [];
             
-            if (isRegex) {
-                try {
-                    const flags = isCaseSensitive ? 'g' : 'gi';
-                    const regex = new RegExp(query, flags);
-                    results = allChanges.filter(line => line.type !== 'context' && regex.test(line.content));
-                } catch (e) {
-                    this._view?.webview.postMessage({ type: 'results', results: [], error: this._l10n.invalidRegex });
-                    return;
-                }
-            } else {
-                const q = isCaseSensitive ? query : query.toLowerCase();
-                results = allChanges.filter(line => {
-                    if (line.type === 'context') return false;
-                    const content = isCaseSensitive ? line.content : line.content.toLowerCase();
-                    return content.includes(q);
-                });
+            // 基础过滤：排除 context 行，如果有关联文件则只搜当前文件
+            let filteredChanges = allChanges.filter(line => line.type !== 'context');
+            if (this._activeFileFilter) {
+                filteredChanges = filteredChanges.filter(line => 
+                    line.file.toLowerCase() === this._activeFileFilter!.file.toLowerCase() &&
+                    line.changeType === this._activeFileFilter!.changeType
+                );
+            }
+
+            let regexSource = isRegex ? query : query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            if (isWholeWord) {
+                regexSource = `\\b${regexSource}\\b`;
+            }
+
+            try {
+                const flags = isCaseSensitive ? '' : 'i';
+                const regex = new RegExp(regexSource, flags);
+                results = filteredChanges.filter(line => regex.test(line.content));
+            } catch (e) {
+                this._view?.webview.postMessage({ type: 'results', results: [], error: this._l10n.invalidRegex });
+                return;
             }
 
             this._currentResults = results;
@@ -199,41 +214,123 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
             <head>
                 <meta charset="UTF-8">
                 <style>
-                    body { padding: 0; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: 13px; }
-                    .search-container { padding: 8px; display: flex; flex-direction: column; gap: 4px; border-bottom: 1px solid var(--vscode-divider); }
-                    .input-row { display: flex; align-items: center; background: var(--vscode-input-background); border: 1px solid var(--vscode-input-border); border-radius: 2px; }
+                    body { padding: 0; color: var(--vscode-foreground); font-family: var(--vscode-font-family); font-size: 13px; overflow: hidden; height: 100vh; display: flex; flex-direction: column; }
+                    .search-container { padding: 10px; display: flex; flex-direction: column; gap: 8px; border-bottom: 1px solid var(--vscode-divider); flex-shrink: 0; }
+                    
+                    /* 模拟原生 Find Widget 的单行布局 */
+                    .input-row { 
+                        display: flex; 
+                        align-items: center; 
+                        background: var(--vscode-input-background); 
+                        border: 1px solid var(--vscode-input-border); 
+                        border-radius: 2px; 
+                        padding: 1px;
+                    }
                     .input-row:focus-within { border-color: var(--vscode-focusBorder); }
-                    input { flex: 1; border: none; background: transparent; color: var(--vscode-input-foreground); padding: 3px 6px; outline: none; font-size: 13px; }
-                    .controls { display: flex; gap: 2px; padding-right: 2px; }
-                    .control { cursor: pointer; display: flex; align-items: center; justify-content: center; width: 20px; height: 20px; border-radius: 3px; font-size: 12px; }
-                    .control.active { background: var(--vscode-inputOption-activeBackground); color: var(--vscode-inputOption-activeForeground); border: 1px solid var(--vscode-inputOption-activeBorder); }
-                    .control:not(.active):hover { background: var(--vscode-toolbar-hoverBackground); }
-                    .results { overflow-y: auto; }
-                    .result-item { padding: 4px 8px; cursor: pointer; display: flex; flex-direction: column; }
+                    
+                    input { 
+                        flex: 1; 
+                        border: none; 
+                        background: transparent; 
+                        color: var(--vscode-input-foreground); 
+                        padding: 4px 6px; 
+                        outline: none; 
+                        font-size: 13px; 
+                        min-width: 0;
+                    }
+                    
+                    .controls { display: flex; gap: 1px; padding-right: 2px; align-items: center; }
+                    .control { 
+                        cursor: pointer; 
+                        display: flex; 
+                        align-items: center; 
+                        justify-content: center; 
+                        width: 22px; 
+                        height: 22px; 
+                        border-radius: 3px; 
+                        font-size: 12px;
+                        color: var(--vscode-input-foreground);
+                        opacity: 0.8;
+                    }
+                    .control:hover { background: var(--vscode-toolbar-hoverBackground); opacity: 1; }
+                    .control.active { 
+                        background: var(--vscode-inputOption-activeBackground); 
+                        color: var(--vscode-inputOption-activeForeground); 
+                        border: 1px solid var(--vscode-inputOption-activeBorder);
+                        opacity: 1;
+                    }
+                    
+                    /* 加载动画 */
+                    .loading-spinner {
+                        display: none;
+                        width: 14px;
+                        height: 14px;
+                        border: 2px solid var(--vscode-textLink-foreground);
+                        border-top: 2px solid transparent;
+                        border-radius: 50%;
+                        animation: spin 1s linear infinite;
+                        margin-right: 4px;
+                    }
+                    @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+                    /* 文件过滤器标签 */
+                    .filter-tag {
+                        display: none;
+                        align-items: center;
+                        gap: 6px;
+                        padding: 4px 8px;
+                        background: var(--vscode-badge-background);
+                        color: var(--vscode-badge-foreground);
+                        border-radius: 4px;
+                        font-size: 11px;
+                        margin-top: 4px;
+                    }
+                    .filter-tag .close-filter { cursor: pointer; font-weight: bold; opacity: 0.7; }
+                    .filter-tag .close-filter:hover { opacity: 1; }
+
+                    .results { flex: 1; overflow-y: auto; }
+                    .result-item { padding: 6px 10px; cursor: pointer; border-bottom: 1px solid var(--vscode-divider); transition: background 0.1s; }
                     .result-item:hover { background: var(--vscode-list-hoverBackground); }
-                    .file-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 2px; }
-                    .file-name { color: var(--vscode-textLink-foreground); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+                    .file-info { display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px; }
+                    .file-name { color: var(--vscode-textLink-foreground); font-size: 12px; font-weight: 500; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 180px; }
                     .line-num { color: var(--vscode-descriptionForeground); font-size: 11px; }
-                    .change-tag { font-size: 9px; padding: 1px 4px; border-radius: 2px; margin-left: 4px; text-transform: uppercase; }
-                    .tag-staged { background: var(--vscode-badge-background); color: var(--vscode-badge-foreground); }
-                    .tag-working { background: rgba(255, 191, 0, 0.2); color: #ffbf00; border: 1px solid rgba(255, 191, 0, 0.3); }
-                    .tag-untracked { background: rgba(78, 201, 176, 0.2); color: #4ec9b0; border: 1px solid rgba(78, 201, 176, 0.3); }
-                    .line-content { font-family: var(--vscode-editor-font-family); font-size: 12px; white-space: pre; overflow: hidden; text-overflow: ellipsis; padding-left: 4px; border-left: 2px solid transparent; }
+                    .change-tag { font-size: 9px; padding: 1px 4px; border-radius: 2px; margin-left: 6px; font-weight: bold; }
+                    .tag-staged { background: #007acc; color: white; }
+                    .tag-working { background: #e2c522; color: black; }
+                    .tag-untracked { background: #4ec9b0; color: black; }
+                    
+                    .line-content { 
+                        font-family: var(--vscode-editor-font-family); 
+                        font-size: 12px; 
+                        white-space: pre; 
+                        overflow: hidden; 
+                        text-overflow: ellipsis; 
+                        padding: 2px 6px; 
+                        background: var(--vscode-editor-background);
+                        border-radius: 2px;
+                        border-left: 3px solid transparent;
+                    }
                     .line-content.added { border-left-color: #4ec9b0; }
                     .line-content.removed { border-left-color: #f48771; }
-                    .no-results { padding: 20px; text-align: center; color: var(--vscode-descriptionForeground); }
-                    .error-msg { padding: 8px; color: var(--vscode-errorForeground); font-size: 12px; }
+                    .no-results { padding: 40px 20px; text-align: center; color: var(--vscode-descriptionForeground); }
+                    .error-msg { padding: 10px; color: var(--vscode-errorForeground); background: rgba(255,0,0,0.1); font-size: 12px; margin: 10px; border-radius: 4px; }
                 </style>
             </head>
             <body>
                 <div class="search-container">
                     <div class="input-row">
                         <input type="text" id="searchInput" placeholder="${this._l10n.placeholder}" spellcheck="false">
+                        <div id="loader" class="loading-spinner"></div>
                         <div class="controls">
                             <div id="caseSensitive" class="control" title="${this._l10n.matchCase}">Aa</div>
+                            <div id="wholeWord" class="control" title="Match Whole Word">ab</div>
                             <div id="regex" class="control" title="${this._l10n.useRegex}">.*</div>
-                            <div id="searchBtn" class="control" title="${this._l10n.searchBtn}" style="color: var(--vscode-textLink-foreground); font-weight: bold;">↵</div>
                         </div>
+                    </div>
+                    <div id="filterTag" class="filter-tag">
+                        <span>Current File Mode</span>
+                        <span id="filterFileName" style="opacity: 0.8; font-style: italic;"></span>
+                        <span class="close-filter" id="clearFilter">×</span>
                     </div>
                 </div>
                 <div id="error" class="error-msg" style="display: none;"></div>
@@ -243,45 +340,84 @@ export class DiffSearchViewProvider implements vscode.WebviewViewProvider {
                     const vscode = acquireVsCodeApi();
                     let isRegex = false;
                     let isCaseSensitive = false;
+                    let isWholeWord = false;
+                    let activeFileFilter = null;
 
                     const searchInput = document.getElementById('searchInput');
-                    const searchBtn = document.getElementById('searchBtn');
+                    const loader = document.getElementById('loader');
                     const resultsContainer = document.getElementById('results');
                     const errorContainer = document.getElementById('error');
                     const regexToggle = document.getElementById('regex');
                     const caseToggle = document.getElementById('caseSensitive');
+                    const wordToggle = document.getElementById('wholeWord');
+                    const filterTag = document.getElementById('filterTag');
+                    const filterFileName = document.getElementById('filterFileName');
+                    const clearFilterBtn = document.getElementById('clearFilter');
 
-                    function triggerSearch() {
+                    let searchTimeout;
+                    function triggerSearch(immediate = false) {
+                        clearTimeout(searchTimeout);
+                        if (immediate) {
+                            performSearch();
+                        } else {
+                            searchTimeout = setTimeout(performSearch, 300); // 防抖处理
+                        }
+                    }
+
+                    function performSearch() {
                         errorContainer.style.display = 'none';
+                        loader.style.display = 'block'; // 显示加载动画
                         vscode.postMessage({
                             type: 'search',
                             value: searchInput.value,
                             isRegex,
-                            isCaseSensitive
+                            isCaseSensitive,
+                            isWholeWord,
+                            fileFilter: activeFileFilter
                         });
                     }
 
                     regexToggle.onclick = () => {
                         isRegex = !isRegex;
                         regexToggle.classList.toggle('active', isRegex);
+                        triggerSearch(true);
                     };
 
                     caseToggle.onclick = () => {
                         isCaseSensitive = !isCaseSensitive;
                         caseToggle.classList.toggle('active', isCaseSensitive);
+                        triggerSearch(true);
                     };
 
-                    searchBtn.onclick = triggerSearch;
+                    wordToggle.onclick = () => {
+                        isWholeWord = !isWholeWord;
+                        wordToggle.classList.toggle('active', isWholeWord);
+                        triggerSearch(true);
+                    };
 
-                    searchInput.onkeydown = (e) => {
-                        if (e.key === 'Enter') {
-                            triggerSearch();
-                        }
+                    clearFilterBtn.onclick = () => {
+                        activeFileFilter = null;
+                        filterTag.style.display = 'none';
+                        vscode.postMessage({ type: 'clearFilter' });
+                        triggerSearch(true);
+                    };
+
+                    searchInput.oninput = () => {
+                        triggerSearch();
                     };
 
                     window.addEventListener('message', event => {
                         const message = event.data;
-                        if (message.type === 'results') {
+                        if (message.command === 'filterByFile') {
+                            activeFileFilter = message.data;
+                            filterFileName.textContent = message.data.file;
+                            filterTag.style.display = 'flex';
+                            searchInput.focus();
+                            triggerSearch(true);
+                        } else if (message.type === 'searching') {
+                            loader.style.display = 'block';
+                        } else if (message.type === 'results') {
+                            loader.style.display = 'none'; // 隐藏加载动画
                             if (message.error) {
                                 errorContainer.textContent = message.error;
                                 errorContainer.style.display = 'block';

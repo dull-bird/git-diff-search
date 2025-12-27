@@ -34,7 +34,7 @@
       {
         "command": "gitDiffSearch.searchInActiveDiff",
         "title": "%command.searchInActiveDiff.title%",
-        "icon": "$(search-fuzzy)"
+        "icon": "$(search)"
       }
     ],
     "menus": {
@@ -49,7 +49,7 @@
         {
           "command": "gitDiffSearch.searchInActiveDiff",
           "when": "isInDiffEditor",
-          "group": "navigation@1"
+          "group": "navigation"
         }
       ]
     }
