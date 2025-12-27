@@ -2,6 +2,10 @@
 
 A VS Code extension for searching and navigating through uncommitted Git changes.
 
+## Screenshot
+
+![](https://github.com/dull-bird/git-diff-search/assets/screenshot.png)
+
 ## Features
 
 ### 🔍 Global Search in Git Changes
@@ -9,7 +13,7 @@ A VS Code extension for searching and navigating through uncommitted Git changes
 Search across all uncommitted modifications in your repository:
 
 - **Staged changes (Index)** – Changes added to the staging area
-- **Unstaged changes (Working Tree)** – Modified files not yet staged  
+- **Unstaged changes (Working Tree)** – Modified files not yet staged
 - **Untracked files** – New files not added to Git
 
 ### 📂 File-Specific Search
@@ -23,7 +27,7 @@ Click the search icon in the Diff editor title bar to search within a specific f
 
 - **Match Case (Aa)** – Case-sensitive search
 - **Whole Word (ab)** – Match whole words only
-- **Regex (.*)** – Regular expression support
+- **Regex (.\*)** – Regular expression support
 
 ## Usage
 
