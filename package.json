@@ -30,6 +30,11 @@
         "command": "gitDiffSearch.focus",
         "title": "%command.focus.title%",
         "icon": "$(search)"
+      },
+      {
+        "command": "gitDiffSearch.searchInActiveDiff",
+        "title": "%command.searchInActiveDiff.title%",
+        "icon": "$(search-fuzzy)"
       }
     ],
     "menus": {
@@ -38,6 +43,13 @@
           "command": "gitDiffSearch.focus",
           "when": "view == scm",
           "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "command": "gitDiffSearch.searchInActiveDiff",
+          "when": "isInDiffEditor",
+          "group": "navigation@1"
         }
       ]
     }

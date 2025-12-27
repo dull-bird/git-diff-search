@@ -11,6 +11,9 @@
     "webview.searchFailed": "搜索失败",
     "webview.staged": "STAGED",
     "webview.unstaged": "UNSTAGED",
-    "webview.untracked": "UNTRACKED"
+    "webview.untracked": "UNTRACKED",
+    "command.searchInActiveDiff.title": "搜索差异内容",
+    "msg.noMatchesFound": "在差异内容中未找到匹配项。",
+    "msg.searchChanges": "搜索新增/删除的行..."
 }
 

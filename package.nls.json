@@ -11,6 +11,9 @@
     "webview.searchFailed": "Search failed",
     "webview.staged": "STAGED",
     "webview.unstaged": "UNSTAGED",
-    "webview.untracked": "UNTRACKED"
+    "webview.untracked": "UNTRACKED",
+    "command.searchInActiveDiff.title": "Search in Diff Changes",
+    "msg.noMatchesFound": "No matches found in the diff changes.",
+    "msg.searchChanges": "Search in added/removed lines..."
 }
 
