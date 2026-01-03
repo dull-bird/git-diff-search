@@ -1,0 +1,51 @@
+name: Publish Extension
+
+on:
+    push:
+        branches:
+            - main
+
+jobs:
+    publish:
+        runs-on: ubuntu-latest
+        steps:
+            - uses: actions/checkout@v4
+
+            # 步骤 1: 检查 Commit Message 是否纯粹是版本号 (例如 0.0.31)
+            - name: Check version format
+              id: check_msg
+              run: |
+                  # 获取最新的 commit message 并去掉首尾空格
+                  COMMIT_MSG=$(git log -1 --pretty=%B | xargs)
+                  echo "Commit message: '$COMMIT_MSG'"
+
+                  # 使用正则匹配：必须是 数字.数字.数字，且没有任何其他字符
+                  if [[ "$COMMIT_MSG" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+                    echo "match=true" >> $GITHUB_OUTPUT
+                    echo "Format matched! Proceeding to publish."
+                  else
+                    echo "match=false" >> $GITHUB_OUTPUT
+                    echo "Format did not match. Skipping publish."
+                  fi
+
+            # 步骤 2: 设置 Node.js 环境 (仅当匹配时执行)
+            - name: Setup Node
+              if: steps.check_msg.outputs.match == 'true'
+              uses: actions/setup-node@v4
+              with:
+                  node-version: 20
+
+            # 步骤 3: 安装依赖 (仅当匹配时执行)
+            - name: Install Dependencies
+              if: steps.check_msg.outputs.match == 'true'
+              run: npm install
+
+            # 步骤 4: 构建项目 (仅当匹配时执行)
+            - name: Build
+              if: steps.check_msg.outputs.match == 'true'
+              run: npm run vscode:prepublish
+
+            # 步骤 5: 发布到 Open VSX (仅当匹配时执行)
+            - name: Publish to Open VSX
+              if: steps.check_msg.outputs.match == 'true'
+              run: npx ovsx publish -p ${{ secrets.OPEN_VSX_TOKEN }}
